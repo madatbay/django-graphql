@@ -1,5 +1,8 @@
 import graphene
-from graphene_django import DjangoObjectType, fields
+from graphene import ObjectType, relay
+from graphene.types import interface
+from graphene_django import DjangoObjectType
+from graphene_django.filter import DjangoFilterConnectionField
 
 from blog.models import Article, Category
 
@@ -14,17 +17,29 @@ class ArticleType(DjangoObjectType):
         model = Article
         fields = ('id', 'name', 'body', 'category')
 
+
+class CategoryNode(DjangoObjectType):
+    class Meta:
+        model = Category
+        filter_fields = ['name','articles']
+        interfaces = (relay.Node, )
+
+class ArticleNode(DjangoObjectType):
+    class Meta:
+        model = Article
+        filter_fields = {
+            'name': ['exact', 'icontains', 'istartswith'],
+            'body': ['exact', 'icontains'],
+            'category': ['exact'],
+            'category__name': ['exact'],
+        }
+        interfaces = (relay.Node, )
+
 class Query(graphene.ObjectType):
-    all_articles = graphene.List(ArticleType)
-    category_by_name = graphene.Field(CategoryType, name=graphene.String(required=True))
+    category = relay.Node.Field(CategoryNode)
+    all_categories = DjangoFilterConnectionField(CategoryNode)
 
-    def resolve_all_articles(root, info):
-        return Article.objects.select_related('category').all()
-
-    def resolve_category_by_name(root, info, name):
-        try:
-            return Category.objects.get(name=name)
-        except Category.DoesNotExist:
-            return None
+    article = relay.Node.Field(ArticleNode)
+    all_articles = DjangoFilterConnectionField(ArticleNode)
             
 schema = graphene.Schema(query=Query)
